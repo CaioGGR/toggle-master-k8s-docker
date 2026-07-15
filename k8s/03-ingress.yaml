@@ -1,0 +1,76 @@
+# ==============================================================================
+# INGRESS (API GATEWAY)
+# ==============================================================================
+# Este arquivo configura o Ingress NGINX para atuar como o "porteiro" (API Gateway)
+# do seu cluster. Ele recebe todo o tráfego externo da internet que chega pelo
+# Load Balancer da AWS e distribui para os microsserviços corretos baseando-se
+# no caminho da URL (ex: /auth vai para o auth-service).
+#
+# A anotação "rewrite-target: /$2" faz uma mágica: ela remove o prefixo (ex: /auth)
+# antes de mandar a requisição para o pod. Assim, o seu código não precisa saber
+# que está rodando debaixo do caminho /auth.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: toggle-master-ingress
+  namespace: toggle-master
+  annotations:
+    # Reescreve a URL removendo o prefixo do serviço antes de entregar pro container
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # --------------------------------------------------------------------
+          # 1. Rota para o AUTH SERVICE
+          # Qualquer requisição para http://<LoadBalancer>/auth/... vem pra cá
+          # --------------------------------------------------------------------
+          - path: /auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8001
+                  
+          # --------------------------------------------------------------------
+          # 2. Rota para o FLAG SERVICE
+          # Qualquer requisição para http://<LoadBalancer>/flags/... vem pra cá
+          # --------------------------------------------------------------------
+          - path: /flags(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: flag-service
+                port:
+                  number: 8002
+                  
+          # --------------------------------------------------------------------
+          # 3. Rota para o TARGETING SERVICE
+          # Qualquer requisição para http://<LoadBalancer>/targeting/... vem pra cá
+          # --------------------------------------------------------------------
+          - path: /targeting(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: targeting-service
+                port:
+                  number: 8003
+                  
+          # --------------------------------------------------------------------
+          # 4. Rota para o EVALUATION SERVICE
+          # Qualquer requisição para http://<LoadBalancer>/evaluate/... vem pra cá
+          # --------------------------------------------------------------------
+          - path: /evaluate(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: evaluation-service
+                port:
+                  number: 8004
+                  
+          # (O Analytics Service não foi exposto intencionalmente porque ele é
+          # um "worker" assíncrono que lê dados da fila do SQS. O mundo externo
+          # não precisa acessar a porta 8005 dele diretamente).

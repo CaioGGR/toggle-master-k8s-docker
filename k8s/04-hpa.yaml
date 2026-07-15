@@ -1,0 +1,36 @@
+# ==============================================================================
+# HORIZONTAL POD AUTOSCALER (HPA)
+# ==============================================================================
+# O HPA monitora o consumo de CPU dos pods. Se a média de uso de CPU ultrapassar
+# o limite (targetCPUUtilizationPercentage), o Kubernetes criará novos pods
+# automaticamente até chegar ao maxReplicas. Quando o tráfego diminuir, ele
+# mata os pods extras para economizar recursos.
+
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: evaluation-service-hpa
+  namespace: toggle-master
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: evaluation-service
+  minReplicas: 2  # Começa com 2 (conforme nosso Deployment)
+  maxReplicas: 5  # Pode escalar até 5 pods se der pico de acesso
+  targetCPUUtilizationPercentage: 70
+
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: analytics-service-hpa
+  namespace: toggle-master
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: analytics-service
+  minReplicas: 1
+  maxReplicas: 3  # Analytics pode escalar até 3 pods se a fila do SQS encher muito
+  targetCPUUtilizationPercentage: 70

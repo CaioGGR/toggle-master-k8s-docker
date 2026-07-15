@@ -1,0 +1,255 @@
+services:
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DE BANCO DE DADOS (POSTGRESQL) PARA O AUTH-SERVICE
+  # ----------------------------------------------------------------------------
+  postgres-auth:
+    # O contexto de build foi atualizado para apontar para a pasta auth-service,
+    # já que o docker-compose.yml agora se encontra na raiz do projeto.
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile.db
+    container_name: postgres-auth
+    
+    # Injeta as variáveis de ambiente a partir do arquivo .env específico deste serviço.
+    env_file:
+      - ./auth-service/.env
+      
+    # Mapeia a porta do PostgreSQL
+    ports:
+      - "5432:5432"
+      
+    # Mapeamentos de volumes físicos/virtuais para o container
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      
+    # Monitora a saúde do banco de dados utilizando variáveis de ambiente injetadas no container ($$)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+    # Utilizando a nova rede global do projeto
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DA APLICAÇÃO (GO AUTH-SERVICE)
+  # ----------------------------------------------------------------------------
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    
+    # Usa a porta com fallback para 8001 caso a variável não exista no contexto do docker-compose
+    ports:
+      - "${PORT:-8001}:${PORT:-8001}"
+      
+    # Carrega variáveis do arquivo .env específico
+    env_file:
+      - ./auth-service/.env
+      
+    # O Go só inicializa quando o banco de dados auth passar com sucesso no healthcheck
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+        
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DE BANCO DE DADOS (POSTGRESQL) PARA O FLAG-SERVICE
+  # ----------------------------------------------------------------------------
+  postgres-flag:
+    build:
+      context: ./flag-service
+      dockerfile: Dockerfile.db
+    container_name: postgres-flag
+    
+    # Carregando variáveis do arquivo .env do flag-service
+    env_file:
+      - ./flag-service/.env
+      
+    # Mapeando para 5433 no host para evitar conflito com a porta 5432 do auth-service
+    ports:
+      - "5433:5432"
+      
+    # Volume nomeado e script de inicialização
+    volumes:
+      - postgres_flag_data:/var/lib/postgresql/data
+      
+    # Healthcheck para garantir que a aplicação só suba quando o banco estiver pronto
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flags_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DA APLICAÇÃO (PYTHON FLAG-SERVICE)
+  # ----------------------------------------------------------------------------
+  flag-service:
+    # Apontando para o contexto de build da pasta do flag-service
+    build:
+      context: ./flag-service
+    container_name: flag-service
+    
+    # Expondo a porta correta exigida pela aplicação
+    ports:
+      - "8002:8002"
+      
+    # Injetando o .env próprio do microsserviço
+    env_file:
+      - ./flag-service/.env
+      
+    # Dependência rígida: o banco (postgres-flag) precisa estar saudável e o auth-service iniciado
+    depends_on:
+      postgres-flag:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+        
+    networks:
+      - tech-challenge-network
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DE BANCO DE DADOS (POSTGRESQL) PARA O TARGETING-SERVICE
+  # ----------------------------------------------------------------------------
+  postgres-targeting:
+    build:
+      context: ./targeting-service
+      dockerfile: Dockerfile.db
+    container_name: postgres-targeting
+    
+    env_file:
+      - ./targeting-service/.env
+      
+    # Mapeando para 5434 no host para evitar conflitos
+    ports:
+      - "5434:5432"
+      
+    volumes:
+      - postgres_targeting_data:/var/lib/postgresql/data
+      
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d targeting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DA APLICAÇÃO (PYTHON TARGETING-SERVICE)
+  # ----------------------------------------------------------------------------
+  targeting-service:
+    build:
+      context: ./targeting-service
+    container_name: targeting-service
+    
+    ports:
+      - "8003:8003"
+      
+    env_file:
+      - ./targeting-service/.env
+      
+    depends_on:
+      postgres-targeting:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+        
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DE CACHE (REDIS) PARA O EVALUATION-SERVICE
+  # ----------------------------------------------------------------------------
+  redis-cache:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_cache_data:/data
+    networks:
+      - tech-challenge-network
+
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DA APLICAÇÃO (GO EVALUATION-SERVICE - HOT PATH)
+  # ----------------------------------------------------------------------------
+  evaluation-service:
+    build:
+      context: ./evaluation-service
+    container_name: evaluation-service
+    
+    ports:
+      - "8004:8004"
+      
+    env_file:
+      - ./evaluation-service/.env
+      
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      flag-service:
+        condition: service_started
+      targeting-service:
+        condition: service_started
+        
+    networks:
+      - tech-challenge-network
+  # ----------------------------------------------------------------------------
+  # SERVIÇO DE ANÁLISE (WORKER PYTHON ANALYTICS-SERVICE)
+  # ----------------------------------------------------------------------------
+  analytics-service:
+    build:
+      context: ./analytics-service
+    container_name: analytics-service
+    
+    ports:
+      - "8005:8005"
+      
+    env_file:
+      - ./analytics-service/.env
+      
+    depends_on:
+      evaluation-service:
+        condition: service_started
+        
+    networks:
+      - tech-challenge-network
+
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DE VOLUMES PERSISTENTES
+# ------------------------------------------------------------------------------
+volumes:
+  # Dados do banco do auth-service
+  postgres_data:
+  # Dados do banco do flag-service
+  postgres_flag_data:
+  # Dados do banco do targeting-service
+  postgres_targeting_data:
+  # Dados em cache do Redis
+  redis_cache_data:
+
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DE REDES ISOLADAS
+# ------------------------------------------------------------------------------
+networks:
+  # Rede unificada (bridge) para comunicação entre todos os microsserviços
+  tech-challenge-network:
+    driver: bridge
+
+
+
+
