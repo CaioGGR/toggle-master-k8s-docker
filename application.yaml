@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: togglemaster-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # URL do seu repositório com os manifestos k8s (ajuste se criou outro repo)
+    repoURL: "https://github.com/CaioGGR/toggle-master-k8s-docker.git"
+    targetRevision: HEAD
+    path: k8s # Pasta onde estão os arquivos 01-config.yaml, 02-services.yaml, etc.
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: toggle-master # Namespace oficial da sua aplicação
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

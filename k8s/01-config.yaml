@@ -35,48 +35,4 @@ data:
   # Configurações AWS não sensíveis
   AWS_REGION: "us-east-1"
   AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
-  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/352911112942/toggle-master-queue"
-
----
-# ==============================================================================
-# 3. SECRET
-# ==============================================================================
-# O Secret armazena informações sensíveis. Todos os valores na seção 'data'
-# DEVEM obrigatoriamente estar encodados em Base64.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: app-secrets
-  namespace: toggle-master
-type: Opaque
-data:
-  # --- Credenciais da AWS ---
-  # AWS_ACCESS_KEY_ID (ex: QUtJQVBMQUNFSE9MREVSCg==)
-  AWS_ACCESS_KEY_ID: "="
-
-  # AWS_SECRET_ACCESS_KEY (ex: U2VjcmV0QWNjZXNzS2V5UGxhY2Vob2xkZXIK)
-  AWS_SECRET_ACCESS_KEY: "=="
-
-  # AWS_SESSION_TOKEN (ex: U2Vzc2lvblRva2VuUGxhY2Vob2xkZXIK)
-  AWS_SESSION_TOKEN: ""
-
-  # --- Bancos de Dados PostgreSQL ---
-  # DB_AUTH_URL (postgresql://user:pass@db-auth:5432/db com ssl require)
-  DB_AUTH_URL: "=="
-
-  # DB_FLAG_URL (postgresql://user:pass@db-flag:5432/db com ssl require)
-  DB_FLAG_URL: "="
-
-  # DB_TARGETING_URL (postgresql://user:pass@db-targeting:5432/db com ssl require)
-  DB_TARGETING_URL: "="
-
-  # --- Cache (Redis ElastiCache) ---
-  # REDIS_URL (redis://elasticache-redis.example.com:6379)
-  REDIS_URL: "=="
-
-  # --- Segurança da Aplicação ---
-  # MASTER_KEY
-  MASTER_KEY: "="
-
-  # SERVICE_API_KEY (usado pelo evaluation-service)
-  SERVICE_API_KEY: "="
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/804297579874/togglemaster-events-queue-dev"
