@@ -105,7 +105,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:d7406c281e778eefa2c61a46bd7327a6e1ead4d2
+          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:fd314bb4e270981a1e97fbe33f04b387c3c1c30b
           ports:
             - containerPort: 8002
           envFrom:
