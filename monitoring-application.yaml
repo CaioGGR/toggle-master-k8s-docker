@@ -1,0 +1,29 @@
+# ==============================================================================
+# ARGOCD APPLICATION - STACK DE MONITORAMENTO (OBSERVABILIDADE)
+# ==============================================================================
+# Este arquivo instrui o ArgoCD a monitorar a pasta 'k8s/monitoring' no GitHub
+# e sincronizar automaticamente todas as ferramentas de observabilidade
+# (OpenTelemetry Collector, Prometheus, Loki e Grafana) no namespace 'monitoring'.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd # O recurso Application sempre fica no namespace do ArgoCD
+spec:
+  project: default
+  source:
+    repoURL: "https://github.com/CaioGGR/toggle-master-k8s-docker.git"
+    targetRevision: HEAD
+    # Pasta específica onde estão os manifestos de monitoramento
+    path: k8s/monitoring
+  destination:
+    server: "https://kubernetes.default.svc"
+    # Namespace isolado onde o Prometheus, Loki, Grafana e OTel vão rodar
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true # Apaga do cluster recursos que forem deletados do Git
+      selfHeal: true # Desfaz alterações manuais no cluster para manter o estado do Git
+    syncOptions:
+      - CreateNamespace=true # Garante que o namespace 'monitoring' seja criado caso não exista

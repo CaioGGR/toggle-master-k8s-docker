@@ -1,0 +1,80 @@
+# ==============================================================================
+# PROMETHEUS (BANCO DE DADOS DE SÉRIES TEMPORAIS - MÉTRICAS)
+# ==============================================================================
+# O Prometheus é responsável por coletar e armazenar métricas numéricas ao longo
+# do tempo (ex: uso de CPU, total de requisições HTTP, taxa de erros).
+# Diferente de outros sistemas, o Prometheus funciona no modelo "PULL" (Scrape):
+# ele vai até o alvo (no nosso caso, o OTel Collector na porta 8889) a cada 15s
+# e puxa as métricas atuais.
+
+# ------------------------------------------------------------------------------
+# 1. CONFIGMAP (Arquivo prometheus.yml)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      # De quanto em quanto tempo o Prometheus vai buscar métricas nos alvos
+      scrape_interval: 15s
+
+    scrape_configs:
+      # Nome do trabalho de coleta
+      - job_name: 'otel-collector'
+        static_configs:
+          # Endereço interno do OTel Collector que expõe as métricas na porta 8889
+          - targets: ['otel-collector.monitoring.svc.cluster.local:8889']
+---
+# ------------------------------------------------------------------------------
+# 2. DEPLOYMENT (Servidor do Prometheus)
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.48.0
+          args:
+            # Indica ao Prometheus onde está o arquivo de configuração montado
+            - "--config.file=/etc/prometheus/prometheus.yml"
+          ports:
+            - containerPort: 9090 # Porta padrão da interface web e API do Prometheus
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/prometheus
+      volumes:
+        - name: config-volume
+          configMap:
+            name: prometheus-config
+---
+# ------------------------------------------------------------------------------
+# 3. SERVICE (Exposição interna para o Grafana consultar)
+# ------------------------------------------------------------------------------
+# O Grafana vai consultar o Prometheus usando:
+# http://prometheus.monitoring.svc.cluster.local:9090
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090

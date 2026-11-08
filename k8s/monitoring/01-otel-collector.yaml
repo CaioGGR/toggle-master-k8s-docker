@@ -1,0 +1,156 @@
+# ==============================================================================
+# OPENTELEMETRY (OTEL) COLLECTOR
+# ==============================================================================
+# O OTel Collector é o "coração" da observabilidade moderna. Em vez dos seus
+# microsserviços terem que saber como enviar dados para o Prometheus, Loki e
+# New Relic separadamente, eles enviam TUDO (Traces, Métricas e Logs) para cá
+# usando um único protocolo padrão (OTLP). O Collector processa e distribui!
+
+# ------------------------------------------------------------------------------
+# 1. CONFIGMAP (Regras de Recebimento, Processamento e Exportação)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: monitoring
+data:
+  otel-collector-config.yaml: |
+    # RECEIVERS: Como os dados entram no Collector
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317 # Porta padrão para receber dados via gRPC
+          http:
+            endpoint: 0.0.0.0:4318 # Porta padrão para receber dados via HTTP/REST
+
+    # PROCESSORS: O que fazer com os dados antes de enviá-los adiante
+    processors:
+      # Proteção contra falta de memória (OOM): descarta dados se o uso passar de 75%
+      # ATENÇÃO: Exige que o Deployment tenha 'resources.limits.memory' configurado!
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      # Agrupa os dados em lotes (batches) a cada 5s ou 8192 itens para economizar rede
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+
+    # EXPORTERS: Para onde o Collector vai enviar os dados processados
+    exporters:
+      # Expõe as métricas na porta 8889 no formato que o Prometheus sabe ler (scrape)
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: "togglemaster" # Prefixo adicionado ao nome de todas as métricas
+      # Envia telemetria para a nuvem do New Relic via OTLP
+      otlp/newrelic:
+        endpoint: "otlp.nr-data.net:4317"
+        headers:
+          api-key: "${NEW_RELIC_LICENSE_KEY}"
+      # Empurra (push) os logs recebidos diretamente para o serviço interno do Loki
+      loki:
+        endpoint: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      # Imprime um resumo básico no terminal (logs do próprio pod) para diagnóstico
+      debug:
+        verbosity: basic
+
+    # SERVICE PIPELINES: Conecta quem recebe -> quem processa -> quem exporta
+    service:
+      pipelines:
+        # Pipeline de Rastreamento (Traces de requisições entre microsserviços)
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/newrelic, debug]
+        # Pipeline de Métricas (CPU, memória, contagem de requisições, latência)
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus, otlp/newrelic]
+        # Pipeline de Logs (Textos de erro/info gerados pelas aplicações)
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [loki, otlp/newrelic]
+---
+# ------------------------------------------------------------------------------
+# 2. DEPLOYMENT (O Container do OTel Collector em execução)
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          # Usamos a imagem 'contrib' porque ela inclui exportadores extras como o do Loki
+          image: otel/opentelemetry-collector-contrib:0.95.0
+          # Aponta para o arquivo de configuração montado pelo ConfigMap
+          args: ["--config=/etc/otelcol/otel-collector-config.yaml"]
+          env:
+            # Puxa a chave de licença do New Relic a partir de uma Secret
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-secrets
+                  key: new-relic-license-key
+                  optional: true
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+            - containerPort: 8889
+              name: prometheus
+          # Limites de CPU e Memória (Obrigatório para o processador memory_limiter calcular os 75%)
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          # Monta o ConfigMap como se fosse um arquivo dentro da pasta /etc/otelcol do container
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config-volume
+          configMap:
+            name: otel-collector-config
+---
+# ------------------------------------------------------------------------------
+# 3. SERVICE (Endereço de rede fixo dentro do Cluster)
+# ------------------------------------------------------------------------------
+# Permite que os microsserviços (no namespace toggle-master) enviem dados para:
+# otel-collector.monitoring.svc.cluster.local:4317 (ou 4318)
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: monitoring
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: prometheus
+      port: 8889
+      targetPort: 8889

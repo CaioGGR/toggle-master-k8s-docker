@@ -1,0 +1,87 @@
+# ==============================================================================
+# GRAFANA (PAINEL DE VISUALIZAÇÃO DE MÉTRICAS E LOGS)
+# ==============================================================================
+# O Grafana é a interface visual onde criamos Dashboards e exploramos tanto as
+# métricas (vindas do Prometheus) quanto os logs (vindos do Loki) em uma única tela.
+
+# ------------------------------------------------------------------------------
+# 1. CONFIGMAP (Provisionamento Automático de Datasources)
+# ------------------------------------------------------------------------------
+# Ao montar este arquivo na pasta '/etc/grafana/provisioning/datasources',
+# o Grafana já nasce conectado ao Prometheus e ao Loki automaticamente, sem
+# precisarmos cadastrar as URLs manualmente na interface web!
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  prometheus-loki.yaml: |
+    apiVersion: 1
+    datasources:
+      # Conecta o Grafana ao serviço interno do Prometheus (Fonte padrão)
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+      # Conecta o Grafana ao serviço interno do Loki para leitura de logs
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+---
+# ------------------------------------------------------------------------------
+# 2. DEPLOYMENT (Servidor Web do Grafana)
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          ports:
+            - containerPort: 3000 # Porta padrão da interface web do Grafana
+          env:
+            # Define a senha inicial do usuário 'admin' (Login: admin / Senha: admin)
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+          volumeMounts:
+            # Injeta o arquivo de datasources na pasta de provisionamento automático
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+---
+# ------------------------------------------------------------------------------
+# 3. SERVICE (Acesso ao Grafana)
+# ------------------------------------------------------------------------------
+# Como é do tipo ClusterIP, para acessar pelo navegador na sua máquina basta rodar:
+# kubectl port-forward svc/grafana -n monitoring 3000:3000
+# E abrir: http://localhost:3000
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000

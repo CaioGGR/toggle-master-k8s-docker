@@ -1,0 +1,13 @@
+# ==============================================================================
+# NAMESPACE DE MONITORAMENTO
+# ==============================================================================
+# Cria uma "caixa" (isolamento lógico) dedicada apenas para a stack de
+# Observabilidade (OTel Collector, Prometheus, Loki e Grafana), separando-a
+# dos microsserviços de negócio que rodam no namespace 'toggle-master'.
+# Nota: Mesmo em namespaces diferentes, eles conversam entre si usando o DNS
+# completo do Kubernetes: <servico>.<namespace>.svc.cluster.local
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
