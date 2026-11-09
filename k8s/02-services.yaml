@@ -47,6 +47,8 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: DB_AUTH_URL
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
           # Limites de processamento para evitar gargalos (OOMKilled)
           resources:
             requests:
@@ -119,6 +121,8 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: DB_FLAG_URL
+            - name: OTEL_SERVICE_NAME
+              value: "flag-service"
           resources:
             requests:
               cpu: "100m"
@@ -188,6 +192,8 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: DB_TARGETING_URL
+            - name: OTEL_SERVICE_NAME
+              value: "targeting-service"
           resources:
             requests:
               cpu: "100m"
@@ -252,6 +258,9 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secrets
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "evaluation-service"
           # Microsserviço em Go é super leve, mas como é hot-path, demos um teto maior de CPU
           resources:
             requests:
@@ -316,6 +325,9 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secrets
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "analytics-service"
           resources:
             requests:
               cpu: "100m"
