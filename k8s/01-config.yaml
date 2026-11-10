@@ -35,7 +35,7 @@ data:
   # Configurações AWS não sensíveis
   AWS_REGION: "us-east-1"
   AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
-  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/804297579874/togglemaster-events-queue-dev"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/328688078672/togglemaster-events-queue-dev"
 
   # Configurações globais do OpenTelemetry
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"

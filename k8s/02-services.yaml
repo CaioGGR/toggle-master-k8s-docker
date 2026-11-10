@@ -31,7 +31,7 @@ spec:
       containers:
         - name: auth-service
           # Substitua 'SEU_ID_CONTA' pelo ID real da sua conta AWS (ex: 352911112942)
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:latest
           ports:
             - containerPort: 8001
           # Injeta todas as configurações e segredos de uma vez!
@@ -107,7 +107,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:latest
           ports:
             - containerPort: 8002
           envFrom:
@@ -178,7 +178,7 @@ spec:
     spec:
       containers:
         - name: targeting-service
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-targeting:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-targeting:latest
           ports:
             - containerPort: 8003
           envFrom:
@@ -250,7 +250,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:latest
           ports:
             - containerPort: 8004
           envFrom:
@@ -317,7 +317,7 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: 804297579874.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:latest
           ports:
             - containerPort: 8005
           envFrom:
