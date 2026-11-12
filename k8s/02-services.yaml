@@ -31,7 +31,7 @@ spec:
       containers:
         - name: auth-service
           # Substitua 'SEU_ID_CONTA' pelo ID real da sua conta AWS (ex: 352911112942)
-          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:latest
+          image: 328688078672.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:836ad1afa68001e02b8779b9e4bc836f31a56188
           ports:
             - containerPort: 8001
           # Injeta todas as configurações e segredos de uma vez!
