@@ -22,6 +22,7 @@ data:
       # Conecta o Grafana ao serviço interno do Prometheus (Fonte padrão)
       - name: Prometheus
         type: prometheus
+        uid: PBFA97CFB590B2093 # UID fixo para manter o vínculo automático com os Dashboards provisionados
         access: proxy
         url: http://prometheus.monitoring.svc.cluster.local:9090
         isDefault: true
@@ -32,7 +33,180 @@ data:
         url: http://loki.monitoring.svc.cluster.local:3100
 ---
 # ------------------------------------------------------------------------------
-# 2. DEPLOYMENT (Servidor Web do Grafana)
+# 2. CONFIGMAP (Provedor de Dashboards como Código - Dashboard as Code)
+# ------------------------------------------------------------------------------
+# Este arquivo avisa ao Grafana para monitorar a pasta '/var/lib/grafana/dashboards'
+# e carregar automaticamente qualquer arquivo .json que estiver lá dentro.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'ToggleMaster Dashboards'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+# ------------------------------------------------------------------------------
+# 3. CONFIGMAP (JSON do Dashboard do ToggleMaster - Fase 4)
+# ------------------------------------------------------------------------------
+# Aqui fica salvo o código JSON do nosso painel. Dessa forma, mesmo destruindo
+# o cluster inteiro com 'terraform destroy', o painel já nasce pronto no próximo 'apply'!
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-togglemaster
+  namespace: monitoring
+data:
+  toggle-master-fase-4.json: |
+    {
+        "annotations": {
+            "list": [
+                {
+                    "builtIn": 1,
+                    "datasource": {
+                        "type": "grafana",
+                        "uid": "-- Grafana --"
+                    },
+                    "enable": true,
+                    "hide": true,
+                    "iconColor": "rgba(0, 211, 255, 1)",
+                    "name": "Annotations & Alerts",
+                    "type": "dashboard"
+                }
+            ]
+        },
+        "editable": true,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 0,
+        "id": null,
+        "links": [],
+        "liveNow": false,
+        "panels": [
+            {
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "PBFA97CFB590B2093"
+                },
+                "fieldConfig": {
+                    "defaults": {
+                        "color": {
+                            "mode": "palette-classic"
+                        },
+                        "custom": {
+                            "axisBorderShow": false,
+                            "axisCenteredZero": false,
+                            "axisColorMode": "text",
+                            "axisLabel": "",
+                            "axisPlacement": "auto",
+                            "barAlignment": 0,
+                            "drawStyle": "line",
+                            "fillOpacity": 25,
+                            "gradientMode": "none",
+                            "hideFrom": {
+                                "legend": false,
+                                "tooltip": false,
+                                "viz": false
+                            },
+                            "insertNulls": false,
+                            "lineInterpolation": "linear",
+                            "lineWidth": 1,
+                            "pointSize": 5,
+                            "scaleDistribution": {
+                                "type": "linear"
+                            },
+                            "showPoints": "auto",
+                            "spanNulls": false,
+                            "stacking": {
+                                "group": "A",
+                                "mode": "none"
+                            },
+                            "thresholdsStyle": {
+                                "mode": "off"
+                            }
+                        },
+                        "mappings": [],
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": null
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 80
+                                }
+                            ]
+                        }
+                    },
+                    "overrides": []
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 0
+                },
+                "id": 1,
+                "options": {
+                    "legend": {
+                        "calcs": [],
+                        "displayMode": "list",
+                        "placement": "bottom",
+                        "showLegend": true
+                    },
+                    "tooltip": {
+                        "mode": "single",
+                        "sort": "none"
+                    }
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "prometheus",
+                            "uid": "PBFA97CFB590B2093"
+                        },
+                        "editorMode": "code",
+                        "expr": "sum(rate(togglemaster_http_server_duration_milliseconds_count[2m])) by (exported_job)",
+                        "instant": false,
+                        "legendFormat": "{{exported_job}}",
+                        "range": true,
+                        "refId": "A"
+                    }
+                ],
+                "title": "Taxa de Requisições por Serviço (Traffic / Throughput)",
+                "type": "timeseries"
+            }
+        ],
+        "refresh": "5s",
+        "schemaVersion": 38,
+        "tags": [],
+        "templating": {
+            "list": []
+        },
+        "time": {
+            "from": "now-5m",
+            "to": "now"
+        },
+        "timepicker": {},
+        "timezone": "",
+        "title": "toggle-master-fase-4",
+        "uid": "efec9b84-db5a-427d-9962-b88fe8a6d0a8",
+        "version": 5,
+        "weekStart": ""
+    }
+---
+# ------------------------------------------------------------------------------
+# 4. DEPLOYMENT (Servidor Web do Grafana)
 # ------------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
@@ -62,13 +236,25 @@ spec:
             # Injeta o arquivo de datasources na pasta de provisionamento automático
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+            # Injeta a configuração do provedor de dashboards automáticos
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            # Injeta o arquivo JSON do nosso painel dentro do Grafana
+            - name: dashboard-togglemaster
+              mountPath: /var/lib/grafana/dashboards
       volumes:
         - name: datasources
           configMap:
             name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboard-togglemaster
+          configMap:
+            name: grafana-dashboard-togglemaster
 ---
 # ------------------------------------------------------------------------------
-# 3. SERVICE (Acesso ao Grafana)
+# 5. SERVICE (Acesso ao Grafana)
 # ------------------------------------------------------------------------------
 # Como é do tipo ClusterIP, para acessar pelo navegador na sua máquina basta rodar:
 # kubectl port-forward svc/grafana -n monitoring 3000:3000
