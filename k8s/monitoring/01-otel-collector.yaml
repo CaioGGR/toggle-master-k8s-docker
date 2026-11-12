@@ -44,6 +44,9 @@ data:
       prometheus:
         endpoint: "0.0.0.0:8889"
         namespace: "togglemaster" # Prefixo adicionado ao nome de todas as métricas
+        # Converte os atributos do recurso (como service.name) em labels das métricas no Prometheus
+        resource_to_telemetry_conversion:
+          enabled: true
       # Envia telemetria para a nuvem do New Relic via OTLP
       otlp/newrelic:
         endpoint: "otlp.nr-data.net:4317"
