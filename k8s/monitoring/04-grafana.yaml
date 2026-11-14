@@ -29,6 +29,7 @@ data:
       # Conecta o Grafana ao serviço interno do Loki para leitura de logs
       - name: Loki
         type: loki
+        uid: P8E80F9AEF21F6940 # UID fixo para manter o vínculo automático com o painel de logs
         access: proxy
         url: http://loki.monitoring.svc.cluster.local:3100
 ---
@@ -444,6 +445,43 @@ data:
                 ],
                 "title": "Requisições Ativas Concorrentes",
                 "type": "stat"
+            },
+            {
+                "datasource": {
+                    "type": "loki",
+                    "uid": "P8E80F9AEF21F6940"
+                },
+                "gridPos": {
+                    "h": 6,
+                    "w": 24,
+                    "x": 0,
+                    "y": 16
+                },
+                "id": 5,
+                "options": {
+                    "dedupStrategy": "none",
+                    "enableLogDetails": true,
+                    "prettifyLogMessage": false,
+                    "showCommonLabels": false,
+                    "showLabels": false,
+                    "showTime": false,
+                    "sortOrder": "Descending",
+                    "wrapLogMessage": false
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "P8E80F9AEF21F6940"
+                        },
+                        "editorMode": "code",
+                        "expr": "{job=~\".+\"}",
+                        "queryType": "range",
+                        "refId": "A"
+                    }
+                ],
+                "title": "Centralização de Logs (Loki)",
+                "type": "logs"
             }
         ],
         "refresh": "5s",
@@ -466,7 +504,112 @@ data:
 
 ---
 # ------------------------------------------------------------------------------
-# 4. DEPLOYMENT (Servidor Web do Grafana)
+# 4. CONFIGMAP (Alertas como Código - Alerting Provisioning)
+# ------------------------------------------------------------------------------
+# Ao montar este arquivo em '/etc/grafana/provisioning/alerting', o Grafana já
+# nasce com as regras de alerta configuradas automaticamente, mesmo após
+# destruir e recriar o cluster inteiro com o Terraform.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting
+  namespace: monitoring
+data:
+  alerts.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: Every 1m
+        folder: ToggleMaster
+        interval: 1m
+        rules:
+          - uid: cc7627b3-b201-47de-a5d6-e4d834dac37d
+            title: Alta Taxa de Erros 5xx
+            condition: C
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: PBFA97CFB590B2093
+                model:
+                  editorMode: code
+                  expr: (sum(rate(togglemaster_http_server_duration_milliseconds_count{exported_job="flag-service", http_status_code=~"5.."}[2m])) / sum(rate(togglemaster_http_server_duration_milliseconds_count{exported_job="flag-service"}[2m]))) * 100
+                  instant: true
+                  intervalMs: 1000
+                  legendFormat: __auto
+                  maxDataPoints: 43200
+                  range: false
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  reducer: last
+                  refId: B
+                  type: reduce
+              - refId: C
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 5
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: B
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: C
+                  type: threshold
+            # Quando não houver nenhum erro 5xx (NoData), considera como OK (Normal)
+            noDataState: OK
+            execErrState: Error
+            for: 1m
+            annotations:
+              description: "A taxa de erros HTTP 5xx do flag-service ultrapassou 5%."
+              summary: "Alta Taxa de Erros 5xx no ToggleMaster"
+            labels:
+              severity: critical
+            isPaused: false
+---
+# ------------------------------------------------------------------------------
+# 5. DEPLOYMENT (Servidor Web do Grafana)
 # ------------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
@@ -502,6 +645,9 @@ spec:
             # Injeta o arquivo JSON do nosso painel dentro do Grafana
             - name: dashboard-togglemaster
               mountPath: /var/lib/grafana/dashboards
+            # Injeta as regras de alerta automáticas no Grafana
+            - name: alerting
+              mountPath: /etc/grafana/provisioning/alerting
       volumes:
         - name: datasources
           configMap:
@@ -512,9 +658,12 @@ spec:
         - name: dashboard-togglemaster
           configMap:
             name: grafana-dashboard-togglemaster
+        - name: alerting
+          configMap:
+            name: grafana-alerting
 ---
 # ------------------------------------------------------------------------------
-# 5. SERVICE (Acesso ao Grafana)
+# 6. SERVICE (Acesso ao Grafana)
 # ------------------------------------------------------------------------------
 # Como é do tipo ClusterIP, para acessar pelo navegador na sua máquina basta rodar:
 # kubectl port-forward svc/grafana -n monitoring 3000:3000
