@@ -3,3 +3,5 @@ export.sh
 *-*/
 *secrets-local.yaml
 GUIA*.md
+*.json
+*.ps1
