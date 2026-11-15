@@ -607,6 +607,40 @@ data:
             labels:
               severity: critical
             isPaused: false
+  # Provisiona o Contact Point unificado (Self-Healing + Discord + PagerDuty)
+  # As chaves sensíveis são lidas via variáveis de ambiente vindas da Secret local.
+  contact-points.yaml: |
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: ToggleMaster-Alerts
+        receivers:
+          - uid: self-healing-webhook
+            type: webhook
+            settings:
+              url: http://self-healing-service.monitoring.svc.cluster.local:8080
+              httpMethod: POST
+          - uid: discord-sre
+            type: discord
+            settings:
+              url: ${DISCORD_WEBHOOK_URL}
+          - uid: pagerduty-incident
+            type: pagerduty
+            settings:
+              integrationKey: ${PAGERDUTY_INTEGRATION_KEY}
+              severity: critical
+  # Provisiona a Notification Policy padrão apontando para o ToggleMaster-Alerts
+  policies.yaml: |
+    apiVersion: 1
+    policies:
+      - orgId: 1
+        receiver: ToggleMaster-Alerts
+        group_by:
+          - grafana_folder
+          - alertname
+        group_wait: 10s
+        group_interval: 30s
+        repeat_interval: 4h
 ---
 # ------------------------------------------------------------------------------
 # 5. DEPLOYMENT (Servidor Web do Grafana)
@@ -635,6 +669,19 @@ spec:
             # Define a senha inicial do usuário 'admin' (Login: admin / Senha: admin)
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: "admin"
+            # Injeta a URL do Discord e a chave do PagerDuty a partir da Secret local (sem expor no Git)
+            - name: DISCORD_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-secrets
+                  key: discord-webhook-url
+                  optional: true
+            - name: PAGERDUTY_INTEGRATION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-secrets
+                  key: pagerduty-integration-key
+                  optional: true
           volumeMounts:
             # Injeta o arquivo de datasources na pasta de provisionamento automático
             - name: datasources
